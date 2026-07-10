@@ -1,0 +1,12 @@
+# Normalize line endings to LF in the repo; check out native on each OS.
+* text=auto eol=lf
+
+# Binary assets — never normalize.
+*.svg text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.wasm binary
+*.ico binary
