@@ -71,8 +71,12 @@ function ensureLoaded(onStatus) {
     })().catch((err) => {
       // Allow a later retry after a failed load.
       loadPromise = null;
+      // Preserve the real cause — a 404 on the pinned core, a CSP/worker
+      // SecurityError, etc. all look like "connection" problems otherwise.
+      console.error("Convertaro: ffmpeg core failed to load —", err);
       throw new Error(
-        "Couldn't load the conversion engine. Check your connection and try again."
+        "Couldn't load the conversion engine. Check your connection and try again.",
+        { cause: err }
       );
     });
   }
@@ -135,6 +139,13 @@ async function runJob({ file, inputName, outputName, args, mime, onProgress }) {
     onProgress?.(1, "Finishing…");
     // `data` is a Uint8Array; pass it directly so we don't over-read a subarray.
     return new Blob([data], { type: mime });
+  } catch (err) {
+    // wasm-level failures (OOM, decoder abort, FS error) REJECT instead of
+    // returning a non-zero code — and the worker rejects with a plain string.
+    // Normalize both paths so the friendly OOM/corrupt hints still fire and a
+    // real Error (with a usable `.message`) always reaches the UI.
+    const raw = err instanceof Error ? err.message : String(err);
+    throw new Error(cleanFfmpegError(lastLog) || cleanFfmpegError(raw) || "Conversion failed.");
   } finally {
     instance.off("log", onLog);
     instance.off("progress", onProg);

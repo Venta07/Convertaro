@@ -13,7 +13,6 @@ const ALIAS = {
   tif: "tiff",
   heif: "heic",
   oga: "ogg",
-  ogv: "ogg",
   mpg: "mpeg",
   mpe: "mpeg",
   m4v: "mp4",
@@ -28,7 +27,7 @@ const AUDIO = new Set([
   "mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "weba", "wma", "aiff", "amr",
 ]);
 const VIDEO = new Set([
-  "mp4", "webm", "mov", "mkv", "avi", "flv", "wmv", "3gp", "mpeg", "ts", "m2ts",
+  "mp4", "webm", "mov", "mkv", "avi", "flv", "wmv", "3gp", "mpeg", "ts", "m2ts", "ogv",
 ]);
 
 function normalize(token) {

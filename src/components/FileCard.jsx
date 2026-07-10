@@ -107,8 +107,8 @@ export default function FileCard({ item, onFormatChange, onConvert, onRemove }) 
               type="button"
               onClick={() => onFormatChange(item.id, item.outputFormat)}
               className="btn-ghost h-11 w-11 !px-0"
-              title="Convert again / change format"
-              aria-label="Convert again"
+              title="Reset to change format or reconvert"
+              aria-label="Reset conversion"
             >
               <RefreshCw className="h-4 w-4" />
             </button>

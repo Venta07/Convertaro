@@ -59,9 +59,17 @@ export function useConverter() {
     filesRef.current = files;
   }, [files]);
 
+  // Track liveness so a conversion that resolves after unmount can revoke the
+  // object URL it just created instead of leaking it.
+  const mountedRef = useRef(true);
+
   // Revoke every outstanding object URL on unmount.
   useEffect(() => {
-    return () => filesRef.current.forEach(revokeItem);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      filesRef.current.forEach(revokeItem);
+    };
   }, []);
 
   const patch = useCallback((id, updater) => {
@@ -131,6 +139,11 @@ export function useConverter() {
 
         const { blob, name } = await convertFile(item, { onProgress });
         const url = URL.createObjectURL(blob);
+        if (!mountedRef.current) {
+          // Hook unmounted while converting — nothing will ever revoke this.
+          URL.revokeObjectURL(url);
+          return;
+        }
         patch(id, {
           status: "done",
           progress: 1,
@@ -164,7 +177,9 @@ export function useConverter() {
   const stats = {
     total: files.length,
     done: files.filter((f) => f.status === "done").length,
-    pending: files.filter((f) => f.status === "idle" || f.status === "error").length,
+    pending: files.filter(
+      (f) => (f.status === "idle" || f.status === "error") && f.outputOptions.length > 0
+    ).length,
     converting: files.some((f) => f.status === "converting"),
     convertible: files.filter((f) => f.outputOptions.length > 0).length,
   };

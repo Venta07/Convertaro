@@ -23,6 +23,52 @@ const LOSSY = new Set(["jpg", "webp"]);
 /** Fill color used when flattening transparency into a format without an alpha channel. */
 const FLATTEN_BG = "#ffffff";
 
+// Browser canvas ceilings: Chrome caps a single dimension at 16384px and the
+// total area at ~268 MP. Beyond these the canvas silently yields a blank image,
+// so we downscale proportionally instead of erroring or producing garbage.
+const MAX_SIDE = 16384;
+const MAX_AREA = 16384 * 16384;
+
+// Raster size used when an input has no intrinsic dimensions (e.g. a sizeless SVG).
+const DEFAULT_RASTER = 1024;
+
+/** Fit (width,height) within the canvas limits, preserving aspect ratio. */
+function clampDimensions(width, height) {
+  const scale = Math.min(
+    1,
+    MAX_SIDE / Math.max(width, height),
+    Math.sqrt(MAX_AREA / (width * height))
+  );
+  if (scale >= 1) return { width, height };
+  return {
+    width: Math.max(1, Math.floor(width * scale)),
+    height: Math.max(1, Math.floor(height * scale)),
+  };
+}
+
+/** Best-effort intrinsic size for inputs that decode with zero dimensions. */
+async function fallbackDimensions(file) {
+  try {
+    if (/svg/i.test(file.type) || /\.svg$/i.test(file.name || "")) {
+      const text = await file.text();
+      const m = text.match(
+        /viewBox\s*=\s*["']\s*[-\d.eE]+\s+[-\d.eE]+\s+([\d.eE]+)\s+([\d.eE]+)/i
+      );
+      if (m) {
+        const w = parseFloat(m[1]);
+        const h = parseFloat(m[2]);
+        if (w > 0 && h > 0) {
+          const s = DEFAULT_RASTER / Math.max(w, h);
+          return { width: Math.round(w * s), height: Math.round(h * s) };
+        }
+      }
+    }
+  } catch {
+    /* fall through to a square default */
+  }
+  return { width: DEFAULT_RASTER, height: DEFAULT_RASTER };
+}
+
 function decodeWithImageElement(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -102,10 +148,20 @@ export async function convertImage(file, targetFormat, opts = {}) {
   }
 
   onProgress?.(0.1);
-  const { source, width, height, cleanup } = await decode(file);
+  const decoded = await decode(file);
+  const { source, cleanup } = decoded;
 
   try {
-    if (!width || !height) throw new Error("The image has no readable dimensions.");
+    // Resolve target dimensions. Some inputs (notably sizeless SVGs that carry
+    // only a viewBox) decode with zero intrinsic size — fall back sensibly
+    // rather than failing on a supported input.
+    let { width, height } = decoded;
+    if (!width || !height) {
+      ({ width, height } = await fallbackDimensions(file));
+    }
+    // Keep the canvas within browser limits so huge images don't silently
+    // produce a blank result.
+    ({ width, height } = clampDimensions(width, height));
     onProgress?.(0.4);
 
     const { canvas, offscreen } = makeCanvas(width, height);
@@ -123,6 +179,13 @@ export async function convertImage(file, targetFormat, opts = {}) {
     onProgress?.(0.7);
 
     const blob = await toBlob(canvas, offscreen, mime, LOSSY.has(targetFormat) ? quality : undefined);
+
+    // Browsers silently substitute PNG when they can't encode the requested type
+    // (e.g. WebP on Safari < 17). Never hand back a file mislabeled by extension.
+    if (blob.type && blob.type !== mime) {
+      throw new Error(`Your browser can't encode ${targetFormat.toUpperCase()} images.`);
+    }
+
     onProgress?.(1);
     return blob;
   } finally {
