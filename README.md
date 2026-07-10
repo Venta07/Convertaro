@@ -77,22 +77,37 @@ File dropped ─▶ detect.js         → category (image/audio/video) + format
 
 ### Threading & the core binary
 
-The ffmpeg **core** (~30 MB wasm) is fetched once, on the first conversion. The
-client feature-detects [cross-origin isolation](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated):
+The ffmpeg **core** (~32 MB wasm) is fetched once, on the first conversion, with a
+live download progress bar, then cached by the browser. Convertaro loads the
+**ESM** build of the core (`@ffmpeg/core@0.12.10/dist/esm`) — this is required
+because the v0.12 worker is a module worker and imports the core via
+`import(coreURL).default` (the UMD build has no default export and fails to load).
+If one CDN is unreachable it automatically falls back to another (jsDelivr → unpkg).
 
-- **Isolated** (COOP/COEP headers present) → uses the faster multi-threaded core.
-- **Not isolated** → falls back to the single-thread core, which works anywhere.
+By default the app runs the **single-thread** core. It's the most reliable option:
+it loads on any static host with **no special headers**, and it avoids a
+multi-thread deadlock seen on some filter graphs (e.g. GIF output). For typical
+files it's plenty fast; a progress bar and a **Cancel** button cover longer jobs.
 
-The dev server and `vite preview` set these headers automatically
-([`vite.config.js`](vite.config.js)). For production, replicate them on your host:
+**Optional multi-thread** (faster for large videos): set `PREFER_MULTITHREAD = true`
+in [`src/lib/ffmpegClient.js`](src/lib/ffmpegClient.js). This needs
+[cross-origin isolation](https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated)
+(COOP + COEP). Headers are pre-configured for common hosts:
 
-- **Netlify / Cloudflare Pages** — [`public/_headers`](public/_headers) is copied to the site root.
-- **Vercel** — [`vercel.json`](vercel.json).
+- **`npx serve` / static** — [`public/serve.json`](public/serve.json)
+- **Netlify / Cloudflare Pages** — [`public/_headers`](public/_headers)
+- **Vercel** — [`vercel.json`](vercel.json)
 - **Nginx** — `add_header Cross-Origin-Opener-Policy "same-origin" always;` +
   `add_header Cross-Origin-Embedder-Policy "require-corp" always;`
 
-Hosts that can't set headers (e.g. GitHub Pages) still work — the app just uses
-the single-thread core.
+The dev server and `vite preview` set these automatically ([`vite.config.js`](vite.config.js)).
+
+### Diagnostics
+
+Click the **terminal icon** (bottom-right) to open the Diagnostics panel: it shows
+the engine status, threading mode, environment capabilities, and a live log of
+every step of every conversion. Use **Copy** or **Download** to export a full
+report (great for bug reports). Everything is also logged to the browser console.
 
 ### Full offline / self-hosted core
 

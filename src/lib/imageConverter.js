@@ -10,6 +10,8 @@
  * canvas cannot encode (e.g. GIF, AVIF) are handled by the ffmpeg engine instead.
  */
 
+import { log } from "./logger.js";
+
 // Output format -> MIME type that canvas can encode.
 export const CANVAS_OUTPUT_MIME = {
   png: "image/png",
@@ -183,9 +185,15 @@ export async function convertImage(file, targetFormat, opts = {}) {
     // Browsers silently substitute PNG when they can't encode the requested type
     // (e.g. WebP on Safari < 17). Never hand back a file mislabeled by extension.
     if (blob.type && blob.type !== mime) {
+      log.error("image", `browser fell back to ${blob.type} instead of ${mime}`);
       throw new Error(`Your browser can't encode ${targetFormat.toUpperCase()} images.`);
     }
 
+    log.info("image", `canvas encode ok → ${targetFormat}`, {
+      canvas: `${width}×${height}`,
+      offscreen,
+      outBytes: blob.size,
+    });
     onProgress?.(1);
     return blob;
   } finally {

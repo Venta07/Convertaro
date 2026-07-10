@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { detectFile } from "../lib/detect.js";
 import { getDefaultOutput, getOutputOptions } from "../lib/formats.js";
 import { convertFile } from "../lib/convert.js";
-import { baseName, uid } from "../lib/utils.js";
+import { cancelActiveJob } from "../lib/ffmpegClient.js";
+import { uid } from "../lib/utils.js";
+import { log } from "../lib/logger.js";
+
+/** Files above this size get a soft "this may be slow / OOM" warning. */
+const LARGE_FILE_MB = 300;
 
 /**
  * @typedef {Object} QueueItem
@@ -17,15 +22,26 @@ import { baseName, uid } from "../lib/utils.js";
  * @property {'idle'|'converting'|'done'|'error'} status
  * @property {number} progress            0..1
  * @property {string} statusText
+ * @property {boolean} sizeWarning
  * @property {string|null} previewUrl     object URL for image thumbnails
  * @property {{url:string,name:string,size:number,blob:Blob}|null} result
  * @property {string|null} error
  */
 
 function createItem(file) {
-  const { category, format } = detectFile(file);
+  const { category, format, mime } = detectFile(file);
   const outputOptions = getOutputOptions(category, format);
   const previewUrl = category === "image" ? URL.createObjectURL(file) : null;
+
+  log.info("queue", `added ${file.name}`, {
+    detected: `${category}/${format || "?"}`,
+    mime: mime || "(none)",
+    sizeMB: +(file.size / 1048576).toFixed(2),
+    outputs: outputOptions.map((o) => o.value),
+  });
+  if (outputOptions.length === 0) {
+    log.warn("queue", `no client-side conversion available for ${file.name} (${category}/${format})`);
+  }
 
   return {
     id: uid(),
@@ -39,6 +55,7 @@ function createItem(file) {
     status: "idle",
     progress: 0,
     statusText: "",
+    sizeWarning: file.size > LARGE_FILE_MB * 1048576,
     previewUrl,
     result: null,
     error: null,
@@ -62,8 +79,6 @@ export function useConverter() {
   // Track liveness so a conversion that resolves after unmount can revoke the
   // object URL it just created instead of leaking it.
   const mountedRef = useRef(true);
-
-  // Revoke every outstanding object URL on unmount.
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -125,7 +140,6 @@ export function useConverter() {
       const item = filesRef.current.find((it) => it.id === id);
       if (!item || item.status === "converting" || item.outputOptions.length === 0) return;
 
-      // Release a previous result before producing a new one.
       if (item.result?.url) URL.revokeObjectURL(item.result.url);
       patch(id, { status: "converting", progress: 0, statusText: "Starting…", result: null, error: null });
 
@@ -140,7 +154,6 @@ export function useConverter() {
         const { blob, name } = await convertFile(item, { onProgress });
         const url = URL.createObjectURL(blob);
         if (!mountedRef.current) {
-          // Hook unmounted while converting — nothing will ever revoke this.
           URL.revokeObjectURL(url);
           return;
         }
@@ -152,6 +165,11 @@ export function useConverter() {
           error: null,
         });
       } catch (err) {
+        if (err?.name === "CanceledError") {
+          patch(id, { status: "idle", progress: 0, statusText: "", error: null });
+          return;
+        }
+        log.error("queue", `failed: ${item.name}`, err);
         patch(id, {
           status: "error",
           progress: 0,
@@ -163,11 +181,18 @@ export function useConverter() {
     [patch]
   );
 
+  // Cancel the in-flight conversion (ffmpeg jobs only; canvas is instant).
+  const cancel = useCallback((id) => {
+    log.warn("queue", `cancel requested for ${id}`);
+    cancelActiveJob();
+  }, []);
+
   // Convert every pending item. ffmpeg runs one job at a time, so we go sequentially.
   const convertAll = useCallback(async () => {
     const pending = filesRef.current.filter(
       (it) => it.status !== "done" && it.status !== "converting" && it.outputOptions.length > 0
     );
+    log.info("queue", `convert all — ${pending.length} file(s)`);
     for (const it of pending) {
       // eslint-disable-next-line no-await-in-loop
       await convertOne(it.id);
@@ -193,5 +218,6 @@ export function useConverter() {
     setOutputFormat,
     convertOne,
     convertAll,
+    cancel,
   };
 }

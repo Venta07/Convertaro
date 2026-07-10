@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Download,
@@ -34,33 +35,31 @@ const CATEGORY_TINT = {
  * @param {import('../hooks/useConverter.js').QueueItem} props.item
  * @param {(id:string, format:string)=>void} props.onFormatChange
  * @param {(id:string)=>void} props.onConvert
+ * @param {(id:string)=>void} props.onCancel
  * @param {(id:string)=>void} props.onRemove
  */
-export default function FileCard({ item, onFormatChange, onConvert, onRemove }) {
+export default function FileCard({ item, onFormatChange, onConvert, onCancel, onRemove }) {
   const Icon = CATEGORY_ICON[item.category] || FileQuestion;
   const busy = item.status === "converting";
   const done = item.status === "done";
   const errored = item.status === "error";
   const unsupported = item.outputOptions.length === 0;
   const delta = done && item.result ? sizeDelta(item.size, item.result.size) : null;
+  const engine = item.outputOptions.find((o) => o.value === item.outputFormat)?.engine;
+  const cancellable = busy && engine === "ffmpeg";
 
   return (
-    <div className="card flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
+    <div className="card animate-scale-in relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
       {/* Thumbnail / icon */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <div
           className={cx(
-            "relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br",
+            "relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br ring-1 ring-black/5 dark:ring-white/10",
             CATEGORY_TINT[item.category]
           )}
         >
           {item.previewUrl ? (
-            <img
-              src={item.previewUrl}
-              alt=""
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
+            <img src={item.previewUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
           ) : (
             <Icon className="h-6 w-6" />
           )}
@@ -70,35 +69,49 @@ export default function FileCard({ item, onFormatChange, onConvert, onRemove }) 
           <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100" title={item.name}>
             {item.name}
           </p>
-          <p className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono font-medium uppercase dark:bg-white/10">
               {item.inputFormat || "?"}
             </span>
             <span>{formatBytes(item.size)}</span>
+            {item.sizeWarning && (
+              <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400" title="Large file — conversion may be slow or run out of memory">
+                <AlertTriangle className="h-3 w-3" />
+                large
+              </span>
+            )}
           </p>
         </div>
       </div>
 
       {/* Controls / status */}
-      <div className="flex shrink-0 flex-col gap-2 sm:w-[19rem]">
+      <div className="flex shrink-0 flex-col gap-2 sm:w-[20rem]">
         {busy ? (
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                {item.statusText || "Converting…"}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                <span className="truncate">{item.statusText || "Converting…"}</span>
               </span>
-              {item.progress > 0 && <span>{Math.round(item.progress * 100)}%</span>}
+              <span className="flex items-center gap-2">
+                {item.progress > 0 && <span>{Math.round(item.progress * 100)}%</span>}
+                {cancellable && (
+                  <button
+                    type="button"
+                    onClick={() => onCancel(item.id)}
+                    className="font-semibold text-rose-500 hover:text-rose-600"
+                    title="Cancel conversion"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </span>
             </div>
             <ProgressBar value={item.progress} indeterminate={item.progress <= 0} />
           </div>
         ) : done && item.result ? (
           <div className="flex items-center gap-2">
-            <a
-              href={item.result.url}
-              download={item.result.name}
-              className="btn-primary flex-1"
-            >
+            <a href={item.result.url} download={item.result.name} className="btn-primary flex-1">
               <Download className="h-4 w-4" />
               Download
               <span className="font-normal opacity-90">· {formatBytes(item.result.size)}</span>

@@ -2,6 +2,7 @@ import { convertImage } from "./imageConverter.js";
 import { getFfmpegArgs, getFormatMeta, getOutputOptions } from "./formats.js";
 import { ffmpegConvert } from "./ffmpegClient.js";
 import { baseName } from "./utils.js";
+import { log } from "./logger.js";
 
 /**
  * Convert a queued file to its selected output format, routing to the Canvas
@@ -30,6 +31,12 @@ export async function convertFile(item, { onProgress } = {}) {
   }
 
   const outName = `${baseName(file.name) || "converted"}.${meta.ext}`;
+
+  log.info(
+    "convert",
+    `${inputFormat || "?"} → ${outputFormat} via ${option.engine}`,
+    { file: file.name, sizeMB: +(file.size / 1048576).toFixed(2), category }
+  );
 
   if (option.engine === "canvas") {
     const blob = await convertImage(file, outputFormat, {

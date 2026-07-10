@@ -13,11 +13,39 @@
   --color-brand-600: #4f46e5;
   --color-brand-700: #4338ca;
 
+  --color-accent-300: #67e8f9;
   --color-accent-400: #22d3ee;
   --color-accent-500: #06b6d4;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, Helvetica, Arial, sans-serif;
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-scale-in: scale-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  --animate-float: float 8s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes shimmer {
+  from { background-position: -160% 0; }
+  to { background-position: 160% 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -18px, 0); }
 }
 
 @layer base {
@@ -27,43 +55,71 @@
 
   body {
     @apply bg-slate-50 text-slate-800 antialiased;
-    @apply dark:bg-[#0b0f19] dark:text-slate-200;
+    @apply dark:bg-[#0a0e1a] dark:text-slate-200;
     font-feature-settings: "cv11", "ss01";
     min-height: 100vh;
   }
 
-  /* Subtle ambient background glow */
+  /* Ambient background: two soft floating orbs + a faint dot grid. */
   body::before {
     content: "";
     position: fixed;
     inset: 0;
-    z-index: -1;
+    z-index: -2;
     pointer-events: none;
     background:
-      radial-gradient(60rem 40rem at 15% -10%, rgba(99, 102, 241, 0.12), transparent 60%),
-      radial-gradient(50rem 40rem at 100% 0%, rgba(34, 211, 238, 0.10), transparent 55%);
+      radial-gradient(48rem 34rem at 12% -8%, rgba(99, 102, 241, 0.16), transparent 60%),
+      radial-gradient(42rem 34rem at 100% 0%, rgba(34, 211, 238, 0.12), transparent 55%);
+  }
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image: radial-gradient(currentColor 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: rgba(100, 116, 139, 0.08);
+    -webkit-mask-image: radial-gradient(60% 50% at 50% 0%, #000, transparent 75%);
+    mask-image: radial-gradient(60% 50% at 50% 0%, #000, transparent 75%);
   }
 
   ::selection {
     @apply bg-brand-500/30;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-/* Reusable component classes. In Tailwind v4 these are defined with @utility so
-   they compose cleanly with utilities in markup (e.g. `btn-ghost h-10 w-10`). */
+/* Reusable component classes (Tailwind v4 @utility so they compose in markup). */
 @utility card {
-  @apply rounded-2xl border border-slate-200/80 bg-white/80 shadow-sm backdrop-blur;
-  @apply dark:border-white/10 dark:bg-white/[0.03];
+  @apply rounded-2xl border border-slate-200/70 bg-white/80 shadow-sm backdrop-blur-sm;
+  @apply dark:border-white/10 dark:bg-white/[0.035];
 }
 
 @utility btn-primary {
   @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm;
   @apply transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60;
   @apply disabled:cursor-not-allowed disabled:opacity-50;
-  background-image: linear-gradient(135deg, var(--color-brand-500), var(--color-brand-600));
+  background-image: linear-gradient(135deg, var(--color-brand-500), var(--color-brand-600) 55%, var(--color-accent-500));
+  background-size: 140% 140%;
+  background-position: 0% 50%;
   &:not(:disabled):hover {
     @apply shadow-md;
-    filter: brightness(1.05);
+    background-position: 100% 50%;
+  }
+  &:not(:disabled):active {
+    transform: translateY(1px);
   }
 }
 
@@ -77,14 +133,42 @@
 
 @utility field {
   @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800;
-  @apply focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30;
+  @apply transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30;
   @apply dark:border-white/10 dark:bg-white/5 dark:text-slate-100;
 }
 
-/* Custom scrollbar for a tidier look */
+@utility gradient-text {
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(120deg, var(--color-brand-500), var(--color-accent-500));
+}
+
+@utility chip {
+  @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold;
+}
+
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.4);
+    border-radius: 9999px;
+  }
+
+  /* Shimmer overlay used on the progress bar. */
+  .shimmer {
+    background-image: linear-gradient(
+      100deg,
+      transparent 20%,
+      rgba(255, 255, 255, 0.35) 50%,
+      transparent 80%
+    );
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
   }
 }

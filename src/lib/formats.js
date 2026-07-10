@@ -137,13 +137,10 @@ export function getFfmpegArgs(_category, _input, output) {
         "-b:a", "128k",
       ];
     case "gif":
-      return [
-        "-filter_complex",
-        "[0:v] fps=15,scale=480:-1:flags=lanczos,split [a][b];" +
-          "[a] palettegen=max_colors=256 [p];" +
-          "[b][p] paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle",
-        "-loop", "0",
-      ];
+      // A single scaling filter is reliable in the wasm core. The palettegen +
+      // paletteuse + split graph gives nicer colors but deadlocks the
+      // multi-threaded core on some inputs, so we keep the dependable path.
+      return ["-vf", "fps=15,scale=480:-1:flags=lanczos", "-loop", "0"];
 
     // ---- Audio targets (-vn drops any video/cover-art stream) ----
     case "mp3":
